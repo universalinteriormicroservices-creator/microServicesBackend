@@ -1,0 +1,10 @@
+# Secret Credentials & Keys (DO NOT COMMIT TO GIT)
+serviceAccountKey*.json
+.env
+.env*.local
+
+# Dependencies
+node_modules/
+
+# Local Dev Data Backup
+*.log

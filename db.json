@@ -1,0 +1,95 @@
+{
+  "users": [
+    {
+      "id": "zeeshan.khan@gmail.com",
+      "name": "Zeeshan Khan",
+      "email": "zeeshan.khan@gmail.com",
+      "phone": "",
+      "googleId": "g_27642254",
+      "role": "customer",
+      "isLoggedIn": true,
+      "memberSince": "August 2026"
+    },
+    {
+      "id": "testgoogle@example.com",
+      "name": "Google Test User",
+      "email": "testgoogle@example.com",
+      "phone": "",
+      "googleId": "g_998877",
+      "role": "customer",
+      "isLoggedIn": true,
+      "memberSince": "August 2026"
+    },
+    {
+      "id": "testusergoogle@example.com",
+      "name": "Google Verified User",
+      "email": "testusergoogle@example.com",
+      "phone": "",
+      "googleId": "g_887766",
+      "role": "customer",
+      "authProvider": "google",
+      "isLoggedIn": true,
+      "lastLoginAt": "2026-08-24T18:20:32.081Z",
+      "createdAt": "2026-08-24T18:20:32.083Z",
+      "memberSince": "August 2026"
+    }
+  ],
+  "employees": [
+    {
+      "id": "emp_7c6ba187",
+      "name": "sahil",
+      "email": "1313wears@gmail.com",
+      "phone": "+9252635231",
+      "specialty": "Plumber",
+      "rating": 5,
+      "jobs": 0
+    }
+  ],
+  "bookings": [
+    {
+      "id": "BK-7D5300",
+      "userEmail": "sahilkhiyatani25@gmail.com",
+      "serviceId": "electrical",
+      "serviceName": "Electrical",
+      "problem": "Power outage in room",
+      "description": "",
+      "date": "2026-08-09",
+      "time": "03:00 PM",
+      "locationId": "dha-5",
+      "phone": "03033460806",
+      "status": "confirmed",
+      "price": "PKR 800",
+      "employeeId": "emp_7c6ba187",
+      "rating": null,
+      "review": null,
+      "createdAt": "2026-08-09T18:03:53.341Z"
+    }
+  ],
+  "settings": [
+    {
+      "baseCity": "Karachi",
+      "centerName": "DHA Phase 5, Karachi",
+      "centerLat": 24.96636807731431,
+      "centerLng": 66.71542754169306,
+      "fromDistanceKm": 21,
+      "toDistanceKm": 43,
+      "coveredLocations": [
+        "dha-5",
+        "dha-6",
+        "dha-7",
+        "dha-8",
+        "clifton",
+        "pechs",
+        "gulshan",
+        "gulistan-jauhar",
+        "nazimabad",
+        "north-nazimabad",
+        "bahadurabad",
+        "malir"
+      ],
+      "statusMessage": "Currently serving within 0 - 15 km of DHA & Clifton",
+      "updatedAt": "2026-08-24T18:34:26.611Z",
+      "id": "serviceArea"
+    }
+  ]
+}
