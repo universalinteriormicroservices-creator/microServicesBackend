@@ -19,6 +19,23 @@ const PORT = process.env.PORT || 5000;
 app.use(cors({ origin: '*' }));
 app.use(express.json());
 
+// Root health check endpoint
+app.get('/', (req, res) => {
+  res.json({
+    message: 'HomeSolution Backend API is running live on Vercel!',
+    status: 'online',
+    endpoints: {
+      auth: '/api/auth',
+      users: '/api/users',
+      admin: '/api/admin',
+      employees: '/api/employees',
+      bookings: '/api/bookings',
+      services: '/api/services',
+      serviceArea: '/api/service-area'
+    }
+  });
+});
+
 // Mount API Route Modules
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
