@@ -46,7 +46,7 @@ async function createBooking(req, res) {
     res.status(201).json(newBooking);
   } catch (error) {
     console.error('Create booking error:', error);
-    res.status(500).json({ error: 'Failed to record booking' });
+    res.status(500).json({ error: 'Failed to record booking', details: error?.message || String(error) });
   }
 }
 
@@ -68,7 +68,7 @@ async function getBookings(req, res) {
     res.json(list);
   } catch (error) {
     console.error('Fetch bookings error:', error);
-    res.status(500).json({ error: 'Failed to retrieve bookings' });
+    res.status(500).json({ error: 'Failed to retrieve bookings', details: error?.message || String(error) });
   }
 }
 
@@ -92,7 +92,8 @@ async function getBookingById(req, res) {
     
     res.json(booking);
   } catch (error) {
-    res.status(500).json({ error: 'Failed to retrieve booking details' });
+    console.error('getBookingById error:', error);
+    res.status(500).json({ error: 'Failed to retrieve booking details', details: error?.message || String(error) });
   }
 }
 
@@ -117,7 +118,8 @@ async function assignEmployee(req, res) {
     
     res.json({ message: 'Employee successfully assigned', status: 'employee_assigned', employeeId });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to assign employee' });
+    console.error('assignEmployee error:', error);
+    res.status(500).json({ error: 'Failed to assign employee', details: error?.message || String(error) });
   }
 }
 
@@ -143,7 +145,7 @@ async function updateBookingStatus(req, res) {
     res.json({ message: `Booking status updated to ${status}`, status });
   } catch (error) {
     console.error('Error updating booking status:', error);
-    res.status(500).json({ error: 'Failed to update booking status' });
+    res.status(500).json({ error: 'Failed to update booking status', details: error?.message || String(error) });
   }
 }
 
@@ -152,8 +154,13 @@ async function completeBooking(req, res) {
   const { id } = req.params;
   const { rating, review } = req.body;
   
-  if (rating === undefined) {
-    return res.status(400).json({ error: 'Rating (0-5) is required to complete service' });
+  if (rating === undefined || rating === null) {
+    return res.status(400).json({ error: 'Rating (1-5) is required to complete service' });
+  }
+
+  const numericRating = Math.max(1, Math.min(5, Number(rating)));
+  if (isNaN(numericRating)) {
+    return res.status(400).json({ error: 'Valid numeric rating between 1 and 5 is required' });
   }
   
   try {
@@ -165,33 +172,61 @@ async function completeBooking(req, res) {
     // Update booking status
     const updateData = {
       status: 'completed',
-      rating: Number(rating),
-      review: review || ''
+      rating: numericRating,
+      review: review || '',
+      completedAt: new Date().toISOString()
     };
     await db.collection('bookings').doc(id).update(updateData);
     
-    // If an employee was assigned, update employee's stats (jobs count and average rating)
+    // If an employee was assigned, update employee's rating strictly from actual customer ratings
     if (booking.employeeId) {
       const empDoc = await db.collection('employees').doc(booking.employeeId).get();
       if (empDoc.exists) {
-        const emp = empDoc.data();
-        const currentJobs = emp.jobs || 0;
-        const currentRating = emp.rating || 5.0;
-        
-        const nextJobs = currentJobs + 1;
-        const nextRating = ((currentRating * currentJobs) + Number(rating)) / nextJobs;
-        
+        // Fetch all bookings for this employee to compute genuine customer rating
+        const allEmpBookingsSnap = await db.collection('bookings')
+          .where('employeeId', '==', booking.employeeId)
+          .get();
+
+        const allDocs = allEmpBookingsSnap.docs ? allEmpBookingsSnap.docs.map(d => d.data()) : [];
+
+        // Gather real customer ratings (including the one just submitted)
+        const customerRatings = [];
+        let completedJobsCount = 0;
+
+        for (const b of allDocs) {
+          if (b.id === id) {
+            customerRatings.push(numericRating);
+            completedJobsCount++;
+          } else if (b.status === 'completed') {
+            completedJobsCount++;
+            if (b.rating !== null && b.rating !== undefined && !isNaN(Number(b.rating))) {
+              customerRatings.push(Number(b.rating));
+            }
+          }
+        }
+
+        // Ensure current rating is included if not found in query list
+        if (!allDocs.some(b => b.id === id)) {
+          customerRatings.push(numericRating);
+          completedJobsCount++;
+        }
+
+        const avgRating = customerRatings.length > 0
+          ? Number((customerRatings.reduce((sum, r) => sum + r, 0) / customerRatings.length).toFixed(1))
+          : numericRating;
+
         await db.collection('employees').doc(booking.employeeId).update({
-          jobs: nextJobs,
-          rating: Number(nextRating.toFixed(1))
+          jobs: completedJobsCount,
+          rating: avgRating,
+          ratingsCount: customerRatings.length
         });
       }
     }
     
-    res.json({ message: 'Service marked as completed and feedback recorded.', status: 'completed' });
+    res.json({ message: 'Service marked as completed and feedback recorded.', status: 'completed', rating: numericRating });
   } catch (error) {
     console.error('Error completing booking:', error);
-    res.status(500).json({ error: 'Failed to complete booking' });
+    res.status(500).json({ error: 'Failed to complete booking', details: error?.message || String(error) });
   }
 }
 

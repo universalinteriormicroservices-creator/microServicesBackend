@@ -32,6 +32,21 @@
       "lastLoginAt": "2026-08-24T18:20:32.081Z",
       "createdAt": "2026-08-24T18:20:32.083Z",
       "memberSince": "August 2026"
+    },
+    {
+      "id": "smstest_1788702486873@example.com",
+      "name": "Test Mobile User",
+      "email": "smstest_1788702486873@example.com",
+      "phone": "03001234567",
+      "password": "ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f",
+      "role": "customer",
+      "authProvider": "email",
+      "isLoggedIn": false,
+      "phoneVerified": true,
+      "phoneVerifiedAt": "2026-09-06T13:48:06.879Z",
+      "createdAt": "2026-09-06T13:48:06.879Z",
+      "lastLoginAt": null,
+      "memberSince": "September 2026"
     }
   ],
   "employees": [
@@ -41,7 +56,25 @@
       "email": "1313wears@gmail.com",
       "phone": "+9252635231",
       "specialty": "Plumber",
-      "rating": 5,
+      "rating": null,
+      "jobs": 0
+    },
+    {
+      "id": "emp_cc13fcc2",
+      "name": "test",
+      "email": "test@test.com",
+      "phone": "123456789",
+      "specialty": "Plumber",
+      "rating": null,
+      "jobs": 0
+    },
+    {
+      "id": "emp_9c76d2bc",
+      "name": "test",
+      "email": "test@test.com",
+      "phone": "123456789",
+      "specialty": "Plumber",
+      "rating": null,
       "jobs": 0
     }
   ],
@@ -63,6 +96,83 @@
       "rating": null,
       "review": null,
       "createdAt": "2026-08-09T18:03:53.341Z"
+    },
+    {
+      "id": "BK-99F915",
+      "userEmail": "customer@test.com",
+      "serviceId": "electrical",
+      "serviceName": "Electrical Repair",
+      "problem": "Light fixture spark",
+      "description": "",
+      "photos": [],
+      "date": "2026-09-10",
+      "time": "11:00 AM",
+      "locationId": "clifton",
+      "phone": "03001234567",
+      "otpCode": "889368",
+      "status": "pending",
+      "price": "PKR 800",
+      "employeeId": null,
+      "rating": null,
+      "review": null,
+      "createdAt": "2026-09-06T05:27:47.573Z"
+    },
+    {
+      "id": "BK-C1C5B1",
+      "userEmail": "customera@test.com",
+      "serviceId": "plumbing",
+      "serviceName": "Pipe Leak",
+      "problem": "Water leaking under sink",
+      "description": "",
+      "photos": [],
+      "date": "2026-09-08",
+      "time": "11:00 AM",
+      "phone": "03001234567",
+      "otpCode": "216967",
+      "status": "pending",
+      "price": "PKR 1,500",
+      "employeeId": null,
+      "rating": null,
+      "review": null,
+      "createdAt": "2026-09-06T14:14:29.025Z"
+    },
+    {
+      "id": "BK-C5DDC5",
+      "userEmail": "customer1@test.com",
+      "serviceId": "ac-repair",
+      "serviceName": "AC Filter Clean",
+      "problem": "Filter cleaning needed",
+      "description": "",
+      "photos": [],
+      "date": "2026-09-08",
+      "time": "12:00 PM",
+      "phone": "03001112233",
+      "otpCode": "270401",
+      "status": "pending",
+      "price": "PKR 3,200",
+      "employeeId": null,
+      "rating": null,
+      "review": null,
+      "createdAt": "2026-09-06T14:15:16.525Z"
+    },
+    {
+      "id": "BK-475E4C",
+      "userEmail": "verifiedcustomer@test.com",
+      "serviceId": "plumbing",
+      "serviceName": "Water Pump Repair",
+      "problem": "Motor stopped running",
+      "description": "",
+      "photos": [],
+      "date": "2026-09-10",
+      "time": "01:00 PM",
+      "phone": "03001234567",
+      "otpCode": "747710",
+      "status": "pending",
+      "price": "PKR 1,500",
+      "employeeId": null,
+      "rating": null,
+      "review": null,
+      "createdAt": "2026-09-06T14:19:29.060Z"
     }
   ],
   "settings": [
@@ -91,5 +201,7 @@
       "updatedAt": "2026-08-24T18:34:26.611Z",
       "id": "serviceArea"
     }
-  ]
+  ],
+  "services": [],
+  "emailCampaigns": []
 }

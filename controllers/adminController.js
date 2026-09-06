@@ -115,7 +115,7 @@ async function getUsers(req, res) {
     res.json(users);
   } catch (error) {
     console.error('Error fetching admin users list:', error);
-    res.status(500).json({ error: 'Failed to retrieve users list' });
+    res.status(500).json({ error: 'Failed to retrieve users list', details: error.message });
   }
 }
 

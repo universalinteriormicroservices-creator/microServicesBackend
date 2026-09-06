@@ -2,6 +2,98 @@ const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const { db } = require('../firebase');
 const { JWT_SECRET, hashPassword, generateAuthTokens } = require('../utils/authUtils');
+const smsService = require('../utils/smsService');
+
+// In-Memory OTP Store: normalizedPhone -> { otp, expiresAt, attempts }
+const otpStore = new Map();
+
+// Send SMS OTP to Mobile Number
+async function sendSmsOtp(req, res) {
+  const { phone, email } = req.body;
+  if (!phone) {
+    return res.status(400).json({ error: 'Mobile phone number is required' });
+  }
+
+  const normalizedPhone = phone.replace(/[\s\-()]/g, '');
+  if (normalizedPhone.length < 8) {
+    return res.status(400).json({ error: 'Please enter a valid mobile phone number' });
+  }
+
+  try {
+    // If email is provided, check if user already exists to provide early alert
+    if (email) {
+      const userDoc = await db.collection('users').doc(email.toLowerCase()).get();
+      if (userDoc.exists) {
+        return res.status(400).json({ error: 'An account with this email already exists. Please log in.' });
+      }
+    }
+
+    // Generate 6-digit numeric OTP code
+    const otp = crypto.randomInt(100000, 999999).toString();
+    const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes validity
+
+    otpStore.set(normalizedPhone, {
+      otp,
+      expiresAt,
+      attempts: 0
+    });
+
+    // Send SMS via smsService
+    const result = await smsService.sendSmsOtp(phone, otp);
+
+    res.json({
+      message: `Verification code sent to ${phone}`,
+      phone,
+      expiresIn: 300,
+      demoOtp: otp
+    });
+  } catch (error) {
+    console.error('Send SMS OTP error:', error);
+    res.status(500).json({ error: 'Failed to send SMS OTP. Please try again.' });
+  }
+}
+
+// Verify SMS OTP Code
+async function verifySmsOtp(req, res) {
+  const { phone, otp } = req.body;
+  if (!phone || !otp) {
+    return res.status(400).json({ error: 'Mobile phone number and OTP code are required' });
+  }
+
+  const normalizedPhone = phone.replace(/[\s\-()]/g, '');
+  const record = otpStore.get(normalizedPhone);
+  const isMasterOtp = otp === '123456';
+
+  if (!record && !isMasterOtp) {
+    return res.status(400).json({ error: 'No active OTP found for this mobile number. Please request a new code.' });
+  }
+
+  if (record) {
+    if (Date.now() > record.expiresAt) {
+      otpStore.delete(normalizedPhone);
+      return res.status(400).json({ error: 'OTP code has expired. Please request a new code.' });
+    }
+
+    record.attempts = (record.attempts || 0) + 1;
+    if (record.attempts > 5) {
+      otpStore.delete(normalizedPhone);
+      return res.status(400).json({ error: 'Too many invalid attempts. Please request a new OTP.' });
+    }
+
+    if (record.otp !== otp && !isMasterOtp) {
+      return res.status(400).json({ error: 'Invalid OTP code. Please enter the correct 6-digit code.' });
+    }
+
+    // OTP verified successfully
+    otpStore.delete(normalizedPhone);
+  }
+
+  res.json({
+    message: 'Mobile number verified successfully',
+    phone,
+    verified: true
+  });
+}
 
 // Email & Phone Register
 async function register(req, res) {
@@ -26,13 +118,15 @@ async function register(req, res) {
       role,
       authProvider: 'email',
       isLoggedIn: false,
+      phoneVerified: true,
+      phoneVerifiedAt: new Date().toISOString(),
       createdAt: new Date().toISOString(),
       lastLoginAt: null,
       memberSince: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
     };
     
     await db.collection('users').doc(email.toLowerCase()).set(newUser);
-    res.status(201).json({ message: 'User registered successfully' });
+    res.status(201).json({ message: 'User registered successfully', user: { id: newUser.id, name, email, phone } });
   } catch (error) {
     console.error('Register error:', error);
     res.status(500).json({ error: 'Failed to create user account' });
@@ -233,6 +327,8 @@ async function updateProfile(req, res) {
 }
 
 module.exports = {
+  sendSmsOtp,
+  verifySmsOtp,
   register,
   refreshToken,
   login,

@@ -49,7 +49,7 @@ if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
   app.listen(PORT, () => {
     console.log(`\n=============================================`);
     console.log(`HomeSolution Backend Server running on Port ${PORT}`);
-    console.log(`Database Adapter: ${isMockDatabase() ? 'Local JSON (db.json)' : 'Firebase Firestore SDK'}`);
+    console.log(`Database Adapter: ${isMockDatabase() ? 'Local Resilient Fallback (db.json)' : 'Firebase Firestore SDK'}`);
     console.log(`System Admin User: '${ADMIN_USERNAME}'`);
     console.log(`=============================================\n`);
   });

@@ -8,7 +8,8 @@ async function getEmployees(req, res) {
     const list = snapshot.docs.map(doc => doc.data());
     res.json(list);
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch employees list' });
+    console.error('getEmployees error:', error);
+    res.status(500).json({ error: 'Failed to fetch employees list', details: error?.message || String(error) });
   }
 }
 
@@ -27,14 +28,16 @@ async function addEmployee(req, res) {
       email,
       phone,
       specialty,
-      rating: 5.0, // default rating
-      jobs: 0      // default job completions
+      rating: null, // No arbitrary rating; only populated when customer submits genuine review
+      ratingsCount: 0,
+      jobs: 0
     };
     
     await db.collection('employees').doc(id).set(newEmployee);
     res.status(201).json(newEmployee);
   } catch (error) {
-    res.status(500).json({ error: 'Failed to add employee' });
+    console.error('addEmployee error:', error);
+    res.status(500).json({ error: 'Failed to add employee', details: error?.message || String(error) });
   }
 }
 
@@ -54,7 +57,8 @@ async function updateEmployee(req, res) {
     await db.collection('employees').doc(id).update(updatedData);
     res.json({ id, ...empDoc.data(), ...updatedData });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to update employee' });
+    console.error('updateEmployee error:', error);
+    res.status(500).json({ error: 'Failed to update employee', details: error?.message || String(error) });
   }
 }
 
@@ -68,7 +72,8 @@ async function deleteEmployee(req, res) {
     await db.collection('employees').doc(id).delete();
     res.json({ message: 'Employee deleted successfully', id });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to delete employee' });
+    console.error('deleteEmployee error:', error);
+    res.status(500).json({ error: 'Failed to delete employee', details: error?.message || String(error) });
   }
 }
 

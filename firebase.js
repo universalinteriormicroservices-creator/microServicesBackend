@@ -3,20 +3,195 @@ const admin = require('firebase-admin');
 const fs = require('fs');
 const path = require('path');
 
-let db;
-let isMock = false;
+// Determine execution environment
+const isVercel = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+const localDbPath = path.join(__dirname, 'db.json');
+const writableDbPath = isVercel ? path.join('/tmp', 'db.json') : localDbPath;
+
+// Seed employees (ratings and jobs start at null/0 until genuine customer reviews are submitted)
+const initialEmployees = [
+  { id: 'emp_1', name: 'Muhammad Ali', specialty: 'Plumber', email: 'ali@universalinterior.pk', phone: '+92 300 7654321', rating: null, jobs: 0 },
+  { id: 'emp_2', name: 'Zeeshan Khan', specialty: 'Electrician', email: 'zeeshan@universalinterior.pk', phone: '+92 301 2345678', rating: null, jobs: 0 },
+  { id: 'emp_3', name: 'Sajid Mehmood', specialty: 'AC Repair', email: 'sajid@universalinterior.pk', phone: '+92 302 8765432', rating: null, jobs: 0 },
+  { id: 'emp_4', name: 'Yasir Ahmed', specialty: 'Carpenter', email: 'yasir@universalinterior.pk', phone: '+92 303 5556667', rating: null, jobs: 0 }
+];
+
+// --- Resilient In-Memory & Local Storage Fallback ---
+let memoryStore = null;
+
+function loadInitialStore() {
+  // 1. Try writableDbPath (e.g. /tmp/db.json in serverless)
+  if (fs.existsSync(writableDbPath)) {
+    try {
+      const raw = fs.readFileSync(writableDbPath, 'utf8');
+      return JSON.parse(raw);
+    } catch (e) {
+      console.warn('Could not parse database from writable path:', e.message);
+    }
+  }
+  // 2. Try bundled localDbPath (__dirname/db.json)
+  if (fs.existsSync(localDbPath)) {
+    try {
+      const raw = fs.readFileSync(localDbPath, 'utf8');
+      return JSON.parse(raw);
+    } catch (e) {
+      console.warn('Could not parse db.json:', e.message);
+    }
+  }
+  // 3. Fallback defaults
+  return {
+    users: [],
+    employees: [...initialEmployees],
+    bookings: [],
+    settings: [],
+    services: [],
+    emailCampaigns: []
+  };
+}
+
+function getStore() {
+  if (!memoryStore) {
+    memoryStore = loadInitialStore();
+    if (!Array.isArray(memoryStore.employees) || memoryStore.employees.length === 0) {
+      memoryStore.employees = [...initialEmployees];
+    }
+    if (!memoryStore.users) memoryStore.users = [];
+    if (!memoryStore.bookings) memoryStore.bookings = [];
+    if (!memoryStore.settings) memoryStore.settings = [];
+    if (!memoryStore.services) memoryStore.services = [];
+    if (!memoryStore.emailCampaigns) memoryStore.emailCampaigns = [];
+  }
+  return memoryStore;
+}
+
+function saveStore(data) {
+  memoryStore = data;
+  try {
+    fs.writeFileSync(writableDbPath, JSON.stringify(data, null, 2));
+  } catch (err) {
+    // Non-fatal if filesystem is read-only; memoryStore maintains state in memory
+  }
+}
+
+// Fallback Firestore-compatible Query & Collection Builder
+function createFallbackCollection(colName) {
+  const getColList = () => {
+    const store = getStore();
+    if (!Array.isArray(store[colName])) {
+      store[colName] = [];
+    }
+    return store[colName];
+  };
+
+  const createQueryObj = (filterFn = null, limitCount = null) => {
+    return {
+      where: (field, op, val) => {
+        const newFilter = (item) => {
+          const basePass = filterFn ? filterFn(item) : true;
+          if (!basePass) return false;
+          if (op === '==') return item[field] === val;
+          if (op === '!=') return item[field] !== val;
+          if (op === '>') return item[field] > val;
+          if (op === '>=') return item[field] >= val;
+          if (op === '<') return item[field] < val;
+          if (op === '<=') return item[field] <= val;
+          if (op === 'array-contains') return Array.isArray(item[field]) && item[field].includes(val);
+          return true;
+        };
+        return createQueryObj(newFilter, limitCount);
+      },
+      limit: (n) => {
+        return createQueryObj(filterFn, n);
+      },
+      orderBy: () => {
+        return createQueryObj(filterFn, limitCount);
+      },
+      get: async () => {
+        const list = getColList();
+        let filtered = filterFn ? list.filter(filterFn) : [...list];
+        if (typeof limitCount === 'number' && limitCount >= 0) {
+          filtered = filtered.slice(0, limitCount);
+        }
+        return {
+          empty: filtered.length === 0,
+          size: filtered.length,
+          docs: filtered.map(item => ({
+            id: item.id || (typeof item.email === 'string' ? item.email : ''),
+            data: () => ({ ...item }),
+            exists: true
+          }))
+        };
+      }
+    };
+  };
+
+  return {
+    ...createQueryObj(),
+    doc: (docId) => ({
+      get: async () => {
+        const list = getColList();
+        const found = list.find(x => x.id === docId || (colName === 'users' && x.email === docId));
+        return {
+          exists: !!found,
+          id: docId,
+          data: () => (found ? { ...found } : undefined)
+        };
+      },
+      set: async (data, options) => {
+        const store = getStore();
+        if (!Array.isArray(store[colName])) store[colName] = [];
+        const list = store[colName];
+        const idx = list.findIndex(x => x.id === docId || (colName === 'users' && x.email === docId));
+        const mergedData = options && options.merge && idx !== -1
+          ? { ...list[idx], ...data }
+          : { ...data, id: docId };
+
+        if (idx !== -1) {
+          list[idx] = mergedData;
+        } else {
+          list.push(mergedData);
+        }
+        saveStore(store);
+        return true;
+      },
+      update: async (data) => {
+        const store = getStore();
+        if (!Array.isArray(store[colName])) store[colName] = [];
+        const list = store[colName];
+        const idx = list.findIndex(x => x.id === docId || (colName === 'users' && x.email === docId));
+        if (idx !== -1) {
+          list[idx] = { ...list[idx], ...data };
+          saveStore(store);
+          return true;
+        }
+        throw new Error(`Document ${docId} not found in collection ${colName}`);
+      },
+      delete: async () => {
+        const store = getStore();
+        if (!Array.isArray(store[colName])) store[colName] = [];
+        store[colName] = store[colName].filter(x => x.id !== docId && (colName !== 'users' || x.email !== docId));
+        saveStore(store);
+        return true;
+      }
+    }),
+    add: async (data) => {
+      const store = getStore();
+      if (!Array.isArray(store[colName])) store[colName] = [];
+      const id = colName.substring(0, 3) + '_' + Math.random().toString(36).substr(2, 9);
+      const newItem = { ...data, id };
+      store[colName].push(newItem);
+      saveStore(store);
+      return { id, data: () => ({ ...newItem }) };
+    }
+  };
+}
+
+// --- Firebase Admin Real Firestore Initialization ---
+let realDb = null;
+let isRealDbAvailable = false;
 
 const serviceAccountPath = path.join(__dirname, 'serviceAccountKey.json');
 
-// Initial seed data
-const initialEmployees = [
-  { id: 'emp_1', name: 'Muhammad Ali', specialty: 'Plumber', email: 'ali@universalinterior.pk', phone: '+92 300 7654321', rating: 4.8, jobs: 342 },
-  { id: 'emp_2', name: 'Zeeshan Khan', specialty: 'Electrician', email: 'zeeshan@universalinterior.pk', phone: '+92 301 2345678', rating: 4.9, jobs: 218 },
-  { id: 'emp_3', name: 'Sajid Mehmood', specialty: 'AC Repair', email: 'sajid@universalinterior.pk', phone: '+92 302 8765432', rating: 4.7, jobs: 195 },
-  { id: 'emp_4', name: 'Yasir Ahmed', specialty: 'Carpenter', email: 'yasir@universalinterior.pk', phone: '+92 303 5556667', rating: 4.6, jobs: 89 }
-];
-
-// Firebase Admin Initialization (Secure Env Variables)
 if (process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL) {
   try {
     admin.initializeApp({
@@ -26,12 +201,10 @@ if (process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL) {
         privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
       })
     });
-    db = admin.firestore();
-    console.log('Firebase DB: Successfully initialized Firebase Firestore via .env Environment Variables');
-    seedRealFirestore();
+    realDb = admin.firestore();
   } catch (err) {
-    console.error('Firebase DB: Initialization failed with environment variables:', err.message);
-    setupLocalDb();
+    console.warn('Firebase DB: Initialization failed with environment variables:', err.message);
+    realDb = null;
   }
 } else if (fs.existsSync(serviceAccountPath)) {
   try {
@@ -39,173 +212,150 @@ if (process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL) {
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount)
     });
-    db = admin.firestore();
-    console.log('Firebase DB: Successfully initialized Firebase Firestore via serviceAccountKey.json');
-    seedRealFirestore();
+    realDb = admin.firestore();
   } catch (err) {
-    console.error('Firebase DB: Initialization failed with key file:', err.message);
-    setupLocalDb();
+    console.warn('Firebase DB: Initialization failed with key file:', err.message);
+    realDb = null;
   }
-} else {
-  console.log('Firebase DB: No credentials found in .env. Using local JSON database (db.json)');
-  setupLocalDb();
 }
 
-async function seedRealFirestore() {
+// Background verification of real Firestore availability with timeout
+let isCheckingDb = false;
+
+async function checkRealDbAvailability() {
+  if (!realDb || isCheckingDb) return;
+  isCheckingDb = true;
   try {
-    const snapshot = await db.collection('employees').limit(1).get();
-    if (snapshot.empty) {
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Firestore connection timeout')), 6000)
+    );
+    const snap = await Promise.race([
+      realDb.collection('employees').limit(1).get(),
+      timeoutPromise
+    ]);
+    isRealDbAvailable = true;
+    console.log('Firebase DB: Successfully connected to Cloud Firestore (active).');
+    if (snap.empty) {
       for (const emp of initialEmployees) {
-        await db.collection('employees').doc(emp.id).set(emp);
+        await realDb.collection('employees').doc(emp.id).set(emp);
       }
     }
   } catch (error) {
+    isRealDbAvailable = false;
     if (error.code === 5 || error.message?.includes('NOT_FOUND')) {
-      console.warn('Firebase DB Notice: Firestore database not created in Firebase Console yet. Using local database (db.json)');
-      setupLocalDb();
+      console.warn('Firebase DB Notice: Firestore database not created in Firebase Console yet. Resilient fallback database is active.');
     } else {
-      console.error('Firebase DB: Error seeding Firestore:', error.message);
+      console.warn('Firebase DB Notice: Cloud Firestore unavailable (' + (error.message || error.code) + '). Resilient fallback database is active.');
     }
   }
 }
 
-function setupLocalDb() {
-  isMock = true;
-  const dbPath = path.join(__dirname, 'db.json');
-  
-  const readData = () => {
-    if (!fs.existsSync(dbPath)) {
-      const initial = { users: [], employees: [], bookings: [] };
-      fs.writeFileSync(dbPath, JSON.stringify(initial, null, 2));
-      return initial;
-    }
-    try {
-      return JSON.parse(fs.readFileSync(dbPath, 'utf8'));
-    } catch (e) {
-      console.error('Error reading db.json, returning empty database structure', e);
-      return { users: [], employees: [], bookings: [] };
-    }
-  };
+if (realDb) {
+  checkRealDbAvailability();
+}
 
-  const writeData = (data) => {
-    try {
-      fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
-    } catch (e) {
-      console.error('Error writing to db.json:', e);
-    }
-  };
-
-  // Seed local DB if empty
-  const data = readData();
-  if (!data.employees || data.employees.length === 0) {
-    data.employees = initialEmployees;
-    writeData(data);
+// Helper to execute realDb operations with a fast timeout and failover
+async function execWithFailover(realFn, fallbackFn, timeoutMs = 5000) {
+  if (!isRealDbAvailable || !realDb) {
+    return await fallbackFn();
   }
+  try {
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Firestore operation timed out')), timeoutMs)
+    );
+    return await Promise.race([realFn(), timeoutPromise]);
+  } catch (err) {
+    console.warn('[Firestore Failover] Real DB operation failed or timed out, switching to fallback store:', err.message || err);
+    if (err.code === 5 || err.message?.includes('NOT_FOUND') || err.message?.includes('timed out')) {
+      isRealDbAvailable = false;
+    }
+    return await fallbackFn();
+  }
+}
 
-  // Abstract Firestore API interface
-  db = {
-    collection: (colName) => {
+// --- Resilient Unified DB Adapter ---
+// Controllers always hold a permanent reference to this object
+const db = {
+  collection: (colName) => {
+    const fallbackCol = createFallbackCollection(colName);
+
+    if (isRealDbAvailable && realDb) {
+      const realCol = realDb.collection(colName);
+
       return {
         get: async () => {
-          const dbData = readData();
-          const list = dbData[colName] || [];
-          return {
-            empty: list.length === 0,
-            docs: list.map(item => ({
-              id: item.id,
-              data: () => item
-            }))
-          };
+          return execWithFailover(
+            () => realCol.get(),
+            () => fallbackCol.get()
+          );
         },
         doc: (docId) => {
+          const realDoc = realCol.doc(docId);
+          const fallbackDoc = fallbackCol.doc(docId);
           return {
+            id: docId,
             get: async () => {
-              const dbData = readData();
-              const list = dbData[colName] || [];
-              const found = list.find(x => x.id === docId);
-              return {
-                exists: !!found,
-                data: () => found,
-                id: docId
-              };
+              return execWithFailover(
+                () => realDoc.get(),
+                () => fallbackDoc.get()
+              );
             },
             set: async (data, options) => {
-              const dbData = readData();
-              if (!dbData[colName]) dbData[colName] = [];
-              const list = dbData[colName];
-              const idx = list.findIndex(x => x.id === docId);
-              
-              const mergedData = options && options.merge && idx !== -1 
-                ? { ...list[idx], ...data } 
-                : { ...data, id: docId };
-
-              if (idx !== -1) {
-                list[idx] = mergedData;
-              } else {
-                list.push(mergedData);
-              }
-              writeData(dbData);
-              return true;
+              return execWithFailover(
+                () => (options !== undefined ? realDoc.set(data, options) : realDoc.set(data)),
+                () => fallbackDoc.set(data, options)
+              );
             },
             update: async (data) => {
-              const dbData = readData();
-              if (!dbData[colName]) dbData[colName] = [];
-              const list = dbData[colName];
-              const idx = list.findIndex(x => x.id === docId);
-              if (idx !== -1) {
-                list[idx] = { ...list[idx], ...data };
-                writeData(dbData);
-                return true;
-              }
-              throw new Error(`Document ${docId} not found in collection ${colName}`);
+              return execWithFailover(
+                () => realDoc.update(data),
+                () => fallbackDoc.update(data)
+              );
             },
             delete: async () => {
-              const dbData = readData();
-              if (!dbData[colName]) dbData[colName] = [];
-              const list = dbData[colName];
-              const filtered = list.filter(x => x.id !== docId);
-              dbData[colName] = filtered;
-              writeData(dbData);
-              return true;
+              return execWithFailover(
+                () => realDoc.delete(),
+                () => fallbackDoc.delete()
+              );
             }
           };
+        },
+        where: (...args) => {
+          const fallbackQuery = fallbackCol.where(...args);
+          if (isRealDbAvailable && realDb) {
+            try {
+              const realQuery = realCol.where(...args);
+              return {
+                get: async () => {
+                  return execWithFailover(
+                    () => realQuery.get(),
+                    () => fallbackQuery.get()
+                  );
+                }
+              };
+            } catch (err) {
+              return fallbackQuery;
+            }
+          }
+          return fallbackQuery;
         },
         add: async (data) => {
-          const dbData = readData();
-          if (!dbData[colName]) dbData[colName] = [];
-          const id = colName.substring(0, 3) + '_' + Math.random().toString(36).substr(2, 9);
-          const newItem = { ...data, id };
-          dbData[colName].push(newItem);
-          writeData(dbData);
-          return { id, data: () => newItem };
-        },
-        where: function(field, op, value) {
-          return {
-            get: async () => {
-              const dbData = readData();
-              const list = dbData[colName] || [];
-              const filtered = list.filter(item => {
-                if (op === '==') return item[field] === value;
-                if (op === '!=') return item[field] !== value;
-                return false;
-              });
-              return {
-                empty: filtered.length === 0,
-                docs: filtered.map(item => ({
-                  id: item.id,
-                  data: () => item
-                }))
-              };
-            }
-          };
+          return execWithFailover(
+            () => realCol.add(data),
+            () => fallbackCol.add(data)
+          );
         }
       };
     }
-  };
-}
+
+    // Default to resilient fallback store
+    return fallbackCol;
+  }
+};
 
 module.exports = {
   db,
   getDb: () => db,
-  isMockDatabase: () => isMock
+  isMockDatabase: () => !isRealDbAvailable
 };
+
