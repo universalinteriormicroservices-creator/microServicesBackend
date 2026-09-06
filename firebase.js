@@ -8,13 +8,7 @@ const isVercel = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_N
 const localDbPath = path.join(__dirname, 'db.json');
 const writableDbPath = isVercel ? path.join('/tmp', 'db.json') : localDbPath;
 
-// Seed employees (ratings and jobs start at null/0 until genuine customer reviews are submitted)
-const initialEmployees = [
-  { id: 'emp_1', name: 'Muhammad Ali', specialty: 'Plumber', email: 'ali@universalinterior.pk', phone: '+92 300 7654321', rating: null, jobs: 0 },
-  { id: 'emp_2', name: 'Zeeshan Khan', specialty: 'Electrician', email: 'zeeshan@universalinterior.pk', phone: '+92 301 2345678', rating: null, jobs: 0 },
-  { id: 'emp_3', name: 'Sajid Mehmood', specialty: 'AC Repair', email: 'sajid@universalinterior.pk', phone: '+92 302 8765432', rating: null, jobs: 0 },
-  { id: 'emp_4', name: 'Yasir Ahmed', specialty: 'Carpenter', email: 'yasir@universalinterior.pk', phone: '+92 303 5556667', rating: null, jobs: 0 }
-];
+
 
 // --- Resilient In-Memory & Local Storage Fallback ---
 let memoryStore = null;
@@ -41,7 +35,7 @@ function loadInitialStore() {
   // 3. Fallback defaults
   return {
     users: [],
-    employees: [...initialEmployees],
+    employees: [],
     bookings: [],
     settings: [],
     services: [],
@@ -52,9 +46,7 @@ function loadInitialStore() {
 function getStore() {
   if (!memoryStore) {
     memoryStore = loadInitialStore();
-    if (!Array.isArray(memoryStore.employees) || memoryStore.employees.length === 0) {
-      memoryStore.employees = [...initialEmployees];
-    }
+    if (!memoryStore.employees) memoryStore.employees = [];
     if (!memoryStore.users) memoryStore.users = [];
     if (!memoryStore.bookings) memoryStore.bookings = [];
     if (!memoryStore.settings) memoryStore.settings = [];
@@ -234,12 +226,6 @@ async function checkRealDbAvailability() {
       timeoutPromise
     ]);
     isRealDbAvailable = true;
-    console.log('Firebase DB: Successfully connected to Cloud Firestore (active).');
-    if (snap.empty) {
-      for (const emp of initialEmployees) {
-        await realDb.collection('employees').doc(emp.id).set(emp);
-      }
-    }
   } catch (error) {
     isRealDbAvailable = false;
     if (error.code === 5 || error.message?.includes('NOT_FOUND')) {
