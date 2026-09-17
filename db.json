@@ -54,6 +54,18 @@
       "body": "Test campaign body message",
       "status": "Sent Successfully",
       "sentAt": "2026-09-17T06:38:22.184Z"
+    },
+    {
+      "id": "CMP-F172F1",
+      "targetType": "Direct Test Broadcast",
+      "recipientCount": 1,
+      "recipients": [
+        "sahilkhiyatani25@gmail.com"
+      ],
+      "subject": "Automated Test Campaign",
+      "body": "Test campaign body message",
+      "status": "Sent Successfully",
+      "sentAt": "2026-09-17T08:08:51.053Z"
     }
   ]
 }

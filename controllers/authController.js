@@ -44,7 +44,7 @@ async function sendEmailOtp(req, res) {
       message: `Verification code sent to ${normalizedEmail}`,
       email: normalizedEmail,
       expiresIn: 300,
-      demoOtp: otp
+      ...(process.env.NODE_ENV === 'test' ? { demoOtp: otp } : {})
     });
   } catch (error) {
     console.error('Send Email OTP error:', error);
