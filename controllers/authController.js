@@ -2,81 +2,80 @@ const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const { db } = require('../firebase');
 const { JWT_SECRET, hashPassword, generateAuthTokens } = require('../utils/authUtils');
-const smsService = require('../utils/smsService');
+const emailService = require('../utils/emailService');
 
-// In-Memory OTP Store: normalizedPhone -> { otp, expiresAt, attempts }
+// In-Memory OTP Store: normalizedEmail -> { otp, expiresAt, attempts }
 const otpStore = new Map();
 
-// Send SMS OTP to Mobile Number
-async function sendSmsOtp(req, res) {
-  const { phone, email } = req.body;
-  if (!phone) {
-    return res.status(400).json({ error: 'Mobile phone number is required' });
+// Send Email OTP for Customer Verification
+async function sendEmailOtp(req, res) {
+  const { email } = req.body;
+  if (!email || typeof email !== 'string') {
+    return res.status(400).json({ error: 'Valid email address is required' });
   }
 
-  const normalizedPhone = phone.replace(/[\s\-()]/g, '');
-  if (normalizedPhone.length < 8) {
-    return res.status(400).json({ error: 'Please enter a valid mobile phone number' });
+  const normalizedEmail = email.trim().toLowerCase();
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(normalizedEmail)) {
+    return res.status(400).json({ error: 'Please enter a valid email address' });
   }
 
   try {
-    // If email is provided, check if user already exists to provide early alert
-    if (email) {
-      const userDoc = await db.collection('users').doc(email.toLowerCase()).get();
-      if (userDoc.exists) {
-        return res.status(400).json({ error: 'An account with this email already exists. Please log in.' });
-      }
+    // Check if an account already exists with this email
+    const userDoc = await db.collection('users').doc(normalizedEmail).get();
+    if (userDoc && userDoc.exists) {
+      return res.status(400).json({ error: 'An account with this email already exists. Please log in.' });
     }
 
     // Generate 6-digit numeric OTP code
     const otp = crypto.randomInt(100000, 999999).toString();
     const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes validity
 
-    otpStore.set(normalizedPhone, {
+    otpStore.set(normalizedEmail, {
       otp,
       expiresAt,
       attempts: 0
     });
 
-    // Send SMS via smsService
-    const result = await smsService.sendSmsOtp(phone, otp);
+    // Send Email via emailService (From: universalinteriormicroservices@gmail.com)
+    await emailService.sendEmailOtp(normalizedEmail, otp);
 
     res.json({
-      message: `Verification code sent to ${phone}`,
-      phone,
+      message: `Verification code sent to ${normalizedEmail}`,
+      email: normalizedEmail,
       expiresIn: 300,
       demoOtp: otp
     });
   } catch (error) {
-    console.error('Send SMS OTP error:', error);
-    res.status(500).json({ error: 'Failed to send SMS OTP. Please try again.' });
+    console.error('Send Email OTP error:', error);
+    res.status(500).json({ error: 'Failed to send verification email. Please try again.' });
   }
 }
 
-// Verify SMS OTP Code
-async function verifySmsOtp(req, res) {
-  const { phone, otp } = req.body;
-  if (!phone || !otp) {
-    return res.status(400).json({ error: 'Mobile phone number and OTP code are required' });
+// Verify Email OTP Code
+async function verifyEmailOtp(req, res) {
+  const { email, otp } = req.body;
+  if (!email || !otp) {
+    return res.status(400).json({ error: 'Email address and OTP code are required' });
   }
 
-  const normalizedPhone = phone.replace(/[\s\-()]/g, '');
-  const record = otpStore.get(normalizedPhone);
+  const normalizedEmail = email.trim().toLowerCase();
+  const record = otpStore.get(normalizedEmail);
   const isMasterOtp = otp === '123456';
 
   if (!record && !isMasterOtp) {
-    return res.status(400).json({ error: 'No active OTP found for this mobile number. Please request a new code.' });
+    return res.status(400).json({ error: 'No active OTP found for this email address. Please request a new code.' });
   }
 
   if (record) {
     if (Date.now() > record.expiresAt) {
-      otpStore.delete(normalizedPhone);
+      otpStore.delete(normalizedEmail);
       return res.status(400).json({ error: 'OTP code has expired. Please request a new code.' });
     }
 
     record.attempts = (record.attempts || 0) + 1;
     if (record.attempts > 5) {
-      otpStore.delete(normalizedPhone);
+      otpStore.delete(normalizedEmail);
       return res.status(400).json({ error: 'Too many invalid attempts. Please request a new OTP.' });
     }
 
@@ -84,13 +83,13 @@ async function verifySmsOtp(req, res) {
       return res.status(400).json({ error: 'Invalid OTP code. Please enter the correct 6-digit code.' });
     }
 
-    // OTP verified successfully
-    otpStore.delete(normalizedPhone);
+    // OTP verified successfully - clear record to prevent reuse
+    otpStore.delete(normalizedEmail);
   }
 
   res.json({
-    message: 'Mobile number verified successfully',
-    phone,
+    message: 'Email address verified successfully',
+    email: normalizedEmail,
     verified: true
   });
 }
@@ -118,8 +117,8 @@ async function register(req, res) {
       role,
       authProvider: 'email',
       isLoggedIn: false,
-      phoneVerified: true,
-      phoneVerifiedAt: new Date().toISOString(),
+      emailVerified: true,
+      emailVerifiedAt: new Date().toISOString(),
       createdAt: new Date().toISOString(),
       lastLoginAt: null,
       memberSince: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
@@ -327,13 +326,14 @@ async function updateProfile(req, res) {
 }
 
 module.exports = {
-  sendSmsOtp,
-  verifySmsOtp,
+  sendEmailOtp,
+  verifyEmailOtp,
   register,
   refreshToken,
   login,
   googleAuth,
   logout,
   getProfile,
-  updateProfile
+  updateProfile,
+  _otpStore: otpStore
 };

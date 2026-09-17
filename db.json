@@ -1,116 +1,15 @@
 {
-  "users": [
-    {
-      "id": "zeeshan.khan@gmail.com",
-      "name": "Zeeshan Khan",
-      "email": "zeeshan.khan@gmail.com",
-      "phone": "",
-      "googleId": "g_27642254",
-      "role": "customer",
-      "isLoggedIn": true,
-      "memberSince": "August 2026"
-    },
-    {
-      "id": "testgoogle@example.com",
-      "name": "Google Test User",
-      "email": "testgoogle@example.com",
-      "phone": "",
-      "googleId": "g_998877",
-      "role": "customer",
-      "isLoggedIn": true,
-      "memberSince": "August 2026"
-    },
-    {
-      "id": "testusergoogle@example.com",
-      "name": "Google Verified User",
-      "email": "testusergoogle@example.com",
-      "phone": "",
-      "googleId": "g_887766",
-      "role": "customer",
-      "authProvider": "google",
-      "isLoggedIn": true,
-      "lastLoginAt": "2026-08-24T18:20:32.081Z",
-      "createdAt": "2026-08-24T18:20:32.083Z",
-      "memberSince": "August 2026"
-    }
-  ],
-  "employees": [
-    {
-      "id": "emp_7c6ba187",
-      "name": "sahil",
-      "email": "1313wears@gmail.com",
-      "phone": "+9252635231",
-      "specialty": "Plumber",
-      "rating": null,
-      "jobs": 0
-    },
-    {
-      "id": "emp_cc13fcc2",
-      "name": "test",
-      "email": "test@test.com",
-      "phone": "123456789",
-      "specialty": "Plumber",
-      "rating": null,
-      "jobs": 0
-    },
-    {
-      "id": "emp_9c76d2bc",
-      "name": "test",
-      "email": "test@test.com",
-      "phone": "123456789",
-      "specialty": "Plumber",
-      "rating": null,
-      "jobs": 0
-    }
-  ],
-  "bookings": [
-    {
-      "id": "BK-7D5300",
-      "userEmail": "sahilkhiyatani25@gmail.com",
-      "serviceId": "electrical",
-      "serviceName": "Electrical",
-      "problem": "Power outage in room",
-      "description": "",
-      "date": "2026-08-09",
-      "time": "03:00 PM",
-      "locationId": "dha-5",
-      "phone": "03033460806",
-      "status": "confirmed",
-      "price": "PKR 800",
-      "employeeId": "emp_7c6ba187",
-      "rating": null,
-      "review": null,
-      "createdAt": "2026-08-09T18:03:53.341Z"
-    },
-    {
-      "id": "BK-99F915",
-      "userEmail": "customer@test.com",
-      "serviceId": "electrical",
-      "serviceName": "Electrical Repair",
-      "problem": "Light fixture spark",
-      "description": "",
-      "photos": [],
-      "date": "2026-09-10",
-      "time": "11:00 AM",
-      "locationId": "clifton",
-      "phone": "03001234567",
-      "otpCode": "889368",
-      "status": "pending",
-      "price": "PKR 800",
-      "employeeId": null,
-      "rating": null,
-      "review": null,
-      "createdAt": "2026-09-06T05:27:47.573Z"
-    }
-  ],
+  "users": [],
+  "employees": [],
+  "bookings": [],
   "settings": [
     {
       "baseCity": "Karachi",
-      "centerName": "DHA Phase 5, Karachi",
-      "centerLat": 24.96636807731431,
-      "centerLng": 66.71542754169306,
-      "fromDistanceKm": 21,
-      "toDistanceKm": 43,
+      "centerName": "DHA & Clifton",
+      "centerLat": 24.8138,
+      "centerLng": 67.0671,
+      "fromDistanceKm": 0,
+      "toDistanceKm": 25,
       "coveredLocations": [
         "dha-5",
         "dha-6",
@@ -125,11 +24,36 @@
         "bahadurabad",
         "malir"
       ],
-      "statusMessage": "Currently serving within 0 - 15 km of DHA & Clifton",
-      "updatedAt": "2026-08-24T18:34:26.611Z",
+      "statusMessage": "Currently serving within 0 - 25 km of DHA & Clifton",
+      "updatedAt": "2026-09-17T00:00:00.000Z",
       "id": "serviceArea"
     }
   ],
   "services": [],
-  "emailCampaigns": []
+  "emailCampaigns": [
+    {
+      "id": "CMP-FA1211",
+      "targetType": "Selected Customers",
+      "recipientCount": 1,
+      "recipients": [
+        "sahilkhiyatani25@gmail.com"
+      ],
+      "subject": "Test Campaign",
+      "body": "This is a test broadcast.",
+      "status": "Sent Successfully",
+      "sentAt": "2026-09-17T06:14:22.136Z"
+    },
+    {
+      "id": "CMP-2F11D2",
+      "targetType": "Direct Test Broadcast",
+      "recipientCount": 1,
+      "recipients": [
+        "sahilkhiyatani25@gmail.com"
+      ],
+      "subject": "Automated Test Campaign",
+      "body": "Test campaign body message",
+      "status": "Sent Successfully",
+      "sentAt": "2026-09-17T06:38:22.184Z"
+    }
+  ]
 }

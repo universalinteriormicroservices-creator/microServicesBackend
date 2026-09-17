@@ -2,8 +2,8 @@ const express = require('express');
 const router = express.Router();
 const authController = require('../controllers/authController');
 
-router.post('/send-sms-otp', authController.sendSmsOtp);
-router.post('/verify-sms-otp', authController.verifySmsOtp);
+router.post('/send-email-otp', authController.sendEmailOtp);
+router.post('/verify-email-otp', authController.verifyEmailOtp);
 router.post('/register', authController.register);
 router.post('/login', authController.login);
 router.post('/google', authController.googleAuth);
