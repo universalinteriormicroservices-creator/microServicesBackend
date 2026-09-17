@@ -186,32 +186,46 @@ const serviceAccountPath = path.join(__dirname, 'serviceAccountKey.json');
 
 if (process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL) {
   try {
-    admin.initializeApp({
-      credential: admin.credential.cert({
-        projectId: process.env.FIREBASE_PROJECT_ID || 'universalinterior-b1276',
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-      })
-    });
+    let privateKey = process.env.FIREBASE_PRIVATE_KEY.trim();
+    if ((privateKey.startsWith('"') && privateKey.endsWith('"')) || (privateKey.startsWith("'") && privateKey.endsWith("'"))) {
+      privateKey = privateKey.slice(1, -1);
+    }
+    privateKey = privateKey.replace(/\\n/g, '\n');
+
+    if (!admin.apps.length) {
+      admin.initializeApp({
+        credential: admin.credential.cert({
+          projectId: process.env.FIREBASE_PROJECT_ID || 'universalinterior-b1276',
+          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+          privateKey,
+        })
+      });
+    }
     realDb = admin.firestore();
+    isRealDbAvailable = true;
   } catch (err) {
     console.warn('Firebase DB: Initialization failed with environment variables:', err.message);
     realDb = null;
+    isRealDbAvailable = false;
   }
 } else if (fs.existsSync(serviceAccountPath)) {
   try {
-    const serviceAccount = require(serviceAccountPath);
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount)
-    });
+    if (!admin.apps.length) {
+      const serviceAccount = require(serviceAccountPath);
+      admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount)
+      });
+    }
     realDb = admin.firestore();
+    isRealDbAvailable = true;
   } catch (err) {
     console.warn('Firebase DB: Initialization failed with key file:', err.message);
     realDb = null;
+    isRealDbAvailable = false;
   }
 }
 
-// Background verification of real Firestore availability with timeout
+// Background verification of real Firestore availability
 let isCheckingDb = false;
 
 async function checkRealDbAvailability() {
@@ -219,19 +233,19 @@ async function checkRealDbAvailability() {
   isCheckingDb = true;
   try {
     const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Firestore connection timeout')), 6000)
+      setTimeout(() => reject(new Error('Firestore connection timeout')), 8000)
     );
-    const snap = await Promise.race([
-      realDb.collection('employees').limit(1).get(),
+    await Promise.race([
+      realDb.collection('users').limit(1).get(),
       timeoutPromise
     ]);
     isRealDbAvailable = true;
   } catch (error) {
-    isRealDbAvailable = false;
     if (error.code === 5 || error.message?.includes('NOT_FOUND')) {
       console.warn('Firebase DB Notice: Firestore database not created in Firebase Console yet. Resilient fallback database is active.');
+      isRealDbAvailable = false;
     } else {
-      console.warn('Firebase DB Notice: Cloud Firestore unavailable (' + (error.message || error.code) + '). Resilient fallback database is active.');
+      console.warn('Firebase DB Notice: Firestore latency (' + (error.message || error.code) + '). Firestore remains active with failover.');
     }
   }
 }
@@ -241,7 +255,7 @@ if (realDb) {
 }
 
 // Helper to execute realDb operations with a fast timeout and failover
-async function execWithFailover(realFn, fallbackFn, timeoutMs = 5000) {
+async function execWithFailover(realFn, fallbackFn, timeoutMs = 6000) {
   if (!isRealDbAvailable || !realDb) {
     return await fallbackFn();
   }
@@ -251,8 +265,8 @@ async function execWithFailover(realFn, fallbackFn, timeoutMs = 5000) {
     );
     return await Promise.race([realFn(), timeoutPromise]);
   } catch (err) {
-    console.warn('[Firestore Failover] Real DB operation failed or timed out, switching to fallback store:', err.message || err);
-    if (err.code === 5 || err.message?.includes('NOT_FOUND') || err.message?.includes('timed out')) {
+    console.warn('[Firestore Failover] Real DB operation failed, switching to fallback store:', err.message || err);
+    if (err.code === 5 || err.message?.includes('NOT_FOUND')) {
       isRealDbAvailable = false;
     }
     return await fallbackFn();
@@ -281,27 +295,41 @@ const db = {
           return {
             id: docId,
             get: async () => {
-              return execWithFailover(
+              const res = await execWithFailover(
                 () => realDoc.get(),
                 () => fallbackDoc.get()
               );
+              if (res && res.exists) return res;
+              // If not found in primary, check fallback store just in case
+              const fbRes = await fallbackDoc.get();
+              if (fbRes && fbRes.exists) {
+                // Background sync to real Firestore
+                try { realDoc.set(fbRes.data()); } catch (_) {}
+                return fbRes;
+              }
+              return res;
             },
             set: async (data, options) => {
+              // Write to fallback store immediately so local state is synchronous
+              await fallbackDoc.set(data, options);
+              // Also persist to real Firestore
               return execWithFailover(
                 () => (options !== undefined ? realDoc.set(data, options) : realDoc.set(data)),
-                () => fallbackDoc.set(data, options)
+                () => true
               );
             },
             update: async (data) => {
+              try { await fallbackDoc.update(data); } catch (_) {}
               return execWithFailover(
                 () => realDoc.update(data),
-                () => fallbackDoc.update(data)
+                () => true
               );
             },
             delete: async () => {
+              try { await fallbackDoc.delete(); } catch (_) {}
               return execWithFailover(
                 () => realDoc.delete(),
-                () => fallbackDoc.delete()
+                () => true
               );
             }
           };
