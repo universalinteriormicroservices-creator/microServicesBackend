@@ -173,18 +173,22 @@ async function login(req, res) {
   }
   
   try {
-    const userDoc = await db.collection('users').doc(email.toLowerCase()).get();
+    const lowerEmail = email.toLowerCase().trim();
+    const userDoc = await db.collection('users').doc(lowerEmail).get();
     if (!userDoc.exists) {
-      return res.status(400).json({ error: 'Invalid email or password' });
+      return res.status(404).json({
+        error: 'No account found with this email address. Your account is not made yet. Please create an account first.',
+        code: 'ACCOUNT_NOT_FOUND'
+      });
     }
     
     const user = userDoc.data();
     if (user.password !== hashPassword(password)) {
-      return res.status(400).json({ error: 'Invalid email or password' });
+      return res.status(401).json({ error: 'Incorrect password. Please verify your credentials or try again.' });
     }
     
     const lastLoginAt = new Date().toISOString();
-    await db.collection('users').doc(email.toLowerCase()).update({
+    await db.collection('users').doc(lowerEmail).update({
       isLoggedIn: true,
       lastLoginAt,
       authProvider: user.authProvider || 'email'
@@ -215,22 +219,33 @@ async function login(req, res) {
 
 // Google Login/Signup API
 async function googleAuth(req, res) {
-  const { email, name, googleId } = req.body;
+  const { email, name, googleId, mode } = req.body;
   
-  if (!email || !name) {
-    return res.status(400).json({ error: 'Google account details missing' });
+  if (!email) {
+    return res.status(400).json({ error: 'Google account email is required' });
   }
   
   try {
-    const lowerEmail = email.toLowerCase();
+    const lowerEmail = email.toLowerCase().trim();
     const userDoc = await db.collection('users').doc(lowerEmail).get();
     const lastLoginAt = new Date().toISOString();
     
+    // If logging in (mode === 'login' or unspecified), verify customer exists!
+    if (mode === 'login' || !mode) {
+      if (!userDoc.exists) {
+        return res.status(404).json({
+          error: 'No account found with this email address. Your account is not made yet. Please create an account first.',
+          code: 'ACCOUNT_NOT_FOUND'
+        });
+      }
+    }
+
     let user;
     if (!userDoc.exists) {
+      // mode === 'register' -> Create new customer account
       user = {
         id: 'usr_' + crypto.randomBytes(6).toString('hex'),
-        name,
+        name: name || 'Customer',
         email: lowerEmail,
         phone: '',
         googleId: googleId || 'g_' + crypto.randomBytes(8).toString('hex'),
